@@ -1,4 +1,6 @@
-# ANKIROS Sync
+# ankiros-sync
+
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
 Standalone ANKIROS exhibitor synchronizer. It uses the public API behind
 `https://www.ankiros.com/tr/exhibitor-list`, stores normalized records in
