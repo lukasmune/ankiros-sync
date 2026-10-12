@@ -55,19 +55,3 @@ each row with its relationship and parent company.
 
 Reports are written to `exports/ANKIROS_2026.xlsx`; the database is
 `data/ankiros.db`.
-
-## VS Code agent instructions
-
-Paste the following into the VS Code IDE agent when asking it to work on this
-repository:
-
-```text
-Work only in the ankiros-sync repository. Before changing code, read
-README.md, config.py, ankiros_sync.py, ankiros-sync.ps1, pytest.ini, and the
-tests. Use the existing pytest framework and run the smallest relevant test
-command first. For complete validation run .\ankiros-sync.ps1 check. Do not
-call the live ANKIROS API from unit tests; mock API responses. Preserve the
-direct/co-exhibitor filter behavior, SQLite persistence, Excel export, and
-PowerShell command aliases. Keep changes focused and update README.md when
-commands or behavior change.
-```
