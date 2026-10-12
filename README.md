@@ -4,7 +4,8 @@
 
 Standalone ANKIROS exhibitor synchronizer. It uses the public API behind
 `https://www.ankiros.com/tr/exhibitor-list`, stores normalized records in
-SQLite, and exports Excel workbooks.
+SQLite, and exports Excel workbooks with summary, company master, and sales
+lead sheets.
 
 The API currently uses the 2026 exhibition identifier and exposes:
 
@@ -51,7 +52,9 @@ Useful commands:
 `--filter direct` exports only companies returned by the participant list.
 `--filter co-exhibitors` exports only companies nested under a direct
 exhibitor's `subcoCompany` detail. `--filter all` includes both and labels
-each row with its relationship and parent company.
+each row with its relationship and parent company. The `Sales Leads` sheet
+includes the API's address, stand, phone, email, English description, and
+English product classifications in addition to the relationship and slug.
 
 Reports are written to `exports/ANKIROS_2026.xlsx`; the database is
 `data/ankiros.db`.

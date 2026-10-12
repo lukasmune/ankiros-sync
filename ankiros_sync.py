@@ -1,6 +1,7 @@
 import argparse
-import json
+import re
 import sqlite3
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,6 +17,19 @@ import config
 FILTERS = {"all", "direct", "co-exhibitors"}
 PARTICIPANT_ENDPOINT = "api/v1.0/participant/getAllParticipantList"
 DETAIL_ENDPOINT = "api/v1.0/participant/getCompanyDetailBySlug"
+EXCEL_ILLEGAL_CHARACTERS = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F]")
+RECORD_FIELDS = (
+    "company_name",
+    "slug",
+    "relationship",
+    "parent_company",
+    "address",
+    "stand_no",
+    "phone",
+    "email",
+    "description",
+    "products",
+)
 
 
 def request_json(session, endpoint, payload):
@@ -61,12 +75,7 @@ def fetch_exhibitors(session=None):
     )
     records = []
     for item in direct:
-        parent = {
-            "company_name": item.get("companyName", "").strip(),
-            "slug": item.get("slug"),
-            "relationship": "direct",
-            "parent_company": None,
-        }
+        parent = _make_record(item, "direct")
         records.append(parent)
         if not item.get("slug"):
             continue
@@ -75,22 +84,68 @@ def fetch_exhibitors(session=None):
             DETAIL_ENDPOINT,
             {"expoId": config.EXPO_ID, "slug": item["slug"]},
         )
+        parent.update(_detail_fields(detail))
         for co_exhibitor in detail.get("subcoCompany", []) or []:
             if not isinstance(co_exhibitor, dict):
                 continue
-            records.append(
-                {
-                    "company_name": (
-                        co_exhibitor.get("companyName")
-                        or co_exhibitor.get("name")
-                        or ""
-                    ).strip(),
-                    "slug": co_exhibitor.get("slug"),
-                    "relationship": "co-exhibitor",
-                    "parent_company": parent["company_name"],
-                }
+            co_record = _make_record(
+                co_exhibitor,
+                "co-exhibitor",
+                parent["company_name"],
             )
+            if co_record["slug"]:
+                try:
+                    co_detail = request_json(
+                        session,
+                        DETAIL_ENDPOINT,
+                        {"expoId": config.EXPO_ID, "slug": co_record["slug"]},
+                    )
+                except RuntimeError as error:
+                    print(
+                        f"Warning: could not enrich co-exhibitor "
+                        f"{co_record['company_name']!r}: {error}",
+                        file=sys.stderr,
+                    )
+                else:
+                    co_record.update(_detail_fields(co_detail))
+            records.append(co_record)
     return records
+
+
+def _make_record(item, relationship, parent_company=None):
+    return {
+        "company_name": (
+            item.get("companyName")
+            or item.get("subcoCompanyName")
+            or item.get("name")
+            or ""
+        ).strip(),
+        "slug": item.get("slug"),
+        "relationship": relationship,
+        "parent_company": parent_company,
+        "address": None,
+        "stand_no": None,
+        "phone": None,
+        "email": None,
+        "description": None,
+        "products": None,
+    }
+
+
+def _detail_fields(detail):
+    products = [
+        item.get("titleEng", "").strip()
+        for item in detail.get("exhibitList", []) or []
+        if isinstance(item, dict) and item.get("titleEng")
+    ]
+    return {
+        "address": detail.get("address"),
+        "stand_no": detail.get("standNo"),
+        "phone": detail.get("phone"),
+        "email": detail.get("email"),
+        "description": detail.get("detailEng") or detail.get("detailTr"),
+        "products": "; ".join(products) or None,
+    }
 
 
 def filter_exhibitors(records, relationship_filter="all"):
@@ -124,12 +179,24 @@ def initialize_database(path=config.DATABASE_PATH):
                 slug TEXT,
                 relationship TEXT NOT NULL,
                 parent_company TEXT,
+                address TEXT,
+                stand_no TEXT,
+                phone TEXT,
+                email TEXT,
+                description TEXT,
+                products TEXT,
                 edition INTEGER NOT NULL,
                 first_seen_at TEXT NOT NULL,
                 UNIQUE(company_name, relationship, parent_company, edition)
             )
             """
         )
+        columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(exhibitors)")
+        }
+        for column in RECORD_FIELDS[4:]:
+            if column not in columns:
+                connection.execute(f"ALTER TABLE exhibitors ADD COLUMN {column} TEXT")
 
 
 def sync_records(records, path=config.DATABASE_PATH):
@@ -141,17 +208,31 @@ def sync_records(records, path=config.DATABASE_PATH):
                 """
                 INSERT INTO exhibitors (
                     company_name, slug, relationship, parent_company,
+                    address, stand_no, phone, email, description, products,
                     edition, first_seen_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(company_name, relationship, parent_company, edition)
-                DO UPDATE SET slug = excluded.slug
+                DO UPDATE SET
+                    slug = excluded.slug,
+                    address = excluded.address,
+                    stand_no = excluded.stand_no,
+                    phone = excluded.phone,
+                    email = excluded.email,
+                    description = excluded.description,
+                    products = excluded.products
                 """,
                 (
                     record["company_name"],
                     record.get("slug"),
                     record["relationship"],
                     record.get("parent_company"),
+                    record.get("address"),
+                    record.get("stand_no"),
+                    record.get("phone"),
+                    record.get("email"),
+                    record.get("description"),
+                    record.get("products"),
                     config.EDITION,
                     now,
                 ),
@@ -162,24 +243,58 @@ def export_records(records, output_path):
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     workbook = Workbook()
-    worksheet = workbook.active
-    worksheet.title = "Exhibitors"
-    worksheet.append([
-        "Company Name", "Relationship", "Parent Company", "Slug", "Edition"
+    summary = workbook.active
+    summary.title = "Summary"
+    summary.append(["Field", "Value"])
+    summary.append(["Event", "ANKIROS"])
+    summary.append(["Edition", config.EDITION])
+    summary.append(["Total Exhibitors", len(records)])
+    summary.append([
+        "Direct Exhibitors",
+        sum(record["relationship"] == "direct" for record in records),
     ])
+    summary.append([
+        "Co-exhibitors",
+        sum(record["relationship"] == "co-exhibitor" for record in records),
+    ])
+    for cell in summary[1]:
+        cell.font = Font(bold=True)
+
+    companies = workbook.create_sheet("Company Master")
+    companies.append(["Company Name", "Relationship", "Parent Company", "Slug"])
     for record in records:
-        worksheet.append([
+        companies.append(_excel_row([
             record["company_name"],
             record["relationship"],
             record.get("parent_company"),
             record.get("slug"),
+        ]))
+
+    worksheet = workbook.create_sheet("Sales Leads")
+    worksheet.append([
+        "Company Name", "Relationship", "Parent Company", "Address",
+        "Stand", "Phone", "Email", "Description", "Product Categories",
+        "Slug", "Edition",
+    ])
+    for record in records:
+        worksheet.append(_excel_row([
+            record["company_name"],
+            record["relationship"],
+            record.get("parent_company"),
+            record.get("address"),
+            record.get("stand_no"),
+            record.get("phone"),
+            record.get("email"),
+            record.get("description"),
+            record.get("products"),
+            record.get("slug"),
             config.EDITION,
-        ])
+        ]))
     worksheet.freeze_panes = "A2"
     for cell in worksheet[1]:
         cell.font = Font(bold=True)
     if worksheet.max_row > 1:
-        table = Table(displayName="AnkirosExhibitors", ref=worksheet.dimensions)
+        table = Table(displayName="AnkirosSalesLeads", ref=worksheet.dimensions)
         table.tableStyleInfo = TableStyleInfo(
             name="TableStyleMedium2",
             showFirstColumn=False,
@@ -195,6 +310,15 @@ def export_records(records, output_path):
         )
     workbook.save(output_path)
     return output_path
+
+
+def _excel_row(values):
+    return [
+        EXCEL_ILLEGAL_CHARACTERS.sub("", value)
+        if isinstance(value, str)
+        else value
+        for value in values
+    ]
 
 
 def main(argv=None):
