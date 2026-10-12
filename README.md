@@ -22,6 +22,24 @@ py -3.13 -m venv .venv
 .\.venv\Scripts\python.exe ankiros_sync.py sync --filter all
 ```
 
+## PowerShell command aliases
+
+The project includes [ankiros-sync.ps1](./ankiros-sync.ps1), matching the
+command style used by `md-sync.ps1`:
+
+```powershell
+.\ankiros-sync.ps1 test
+.\ankiros-sync.ps1 smoke
+.\ankiros-sync.ps1 sync -Filter all
+.\ankiros-sync.ps1 sync -Filter direct
+.\ankiros-sync.ps1 sync -Filter co-exhibitors
+.\ankiros-sync.ps1 export -Filter all
+.\ankiros-sync.ps1 check
+```
+
+`test` runs the complete pytest suite. `smoke` intentionally calls the live
+ANKIROS API. `check` compiles Python, runs pytest, and checks the Git diff.
+
 Useful commands:
 
 ```powershell
@@ -37,3 +55,19 @@ each row with its relationship and parent company.
 
 Reports are written to `exports/ANKIROS_2026.xlsx`; the database is
 `data/ankiros.db`.
+
+## VS Code agent instructions
+
+Paste the following into the VS Code IDE agent when asking it to work on this
+repository:
+
+```text
+Work only in the ankiros-sync repository. Before changing code, read
+README.md, config.py, ankiros_sync.py, ankiros-sync.ps1, pytest.ini, and the
+tests. Use the existing pytest framework and run the smallest relevant test
+command first. For complete validation run .\ankiros-sync.ps1 check. Do not
+call the live ANKIROS API from unit tests; mock API responses. Preserve the
+direct/co-exhibitor filter behavior, SQLite persistence, Excel export, and
+PowerShell command aliases. Keep changes focused and update README.md when
+commands or behavior change.
+```
