@@ -27,7 +27,6 @@ RECORD_FIELDS = (
     "stand_no",
     "phone",
     "email",
-    "description",
     "products",
 )
 
@@ -127,7 +126,6 @@ def _make_record(item, relationship, parent_company=None):
         "stand_no": None,
         "phone": None,
         "email": None,
-        "description": None,
         "products": None,
     }
 
@@ -143,7 +141,6 @@ def _detail_fields(detail):
         "stand_no": detail.get("standNo"),
         "phone": detail.get("phone"),
         "email": detail.get("email"),
-        "description": detail.get("detailEng") or detail.get("detailTr"),
         "products": "; ".join(products) or None,
     }
 
@@ -183,7 +180,6 @@ def initialize_database(path=config.DATABASE_PATH):
                 stand_no TEXT,
                 phone TEXT,
                 email TEXT,
-                description TEXT,
                 products TEXT,
                 edition INTEGER NOT NULL,
                 first_seen_at TEXT NOT NULL,
@@ -194,6 +190,8 @@ def initialize_database(path=config.DATABASE_PATH):
         columns = {
             row[1] for row in connection.execute("PRAGMA table_info(exhibitors)")
         }
+        if "description" in columns:
+            connection.execute("ALTER TABLE exhibitors DROP COLUMN description")
         for column in RECORD_FIELDS[4:]:
             if column not in columns:
                 connection.execute(f"ALTER TABLE exhibitors ADD COLUMN {column} TEXT")
@@ -208,10 +206,10 @@ def sync_records(records, path=config.DATABASE_PATH):
                 """
                 INSERT INTO exhibitors (
                     company_name, slug, relationship, parent_company,
-                    address, stand_no, phone, email, description, products,
+                    address, stand_no, phone, email, products,
                     edition, first_seen_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(company_name, relationship, parent_company, edition)
                 DO UPDATE SET
                     slug = excluded.slug,
@@ -219,7 +217,6 @@ def sync_records(records, path=config.DATABASE_PATH):
                     stand_no = excluded.stand_no,
                     phone = excluded.phone,
                     email = excluded.email,
-                    description = excluded.description,
                     products = excluded.products
                 """,
                 (
@@ -231,7 +228,6 @@ def sync_records(records, path=config.DATABASE_PATH):
                     record.get("stand_no"),
                     record.get("phone"),
                     record.get("email"),
-                    record.get("description"),
                     record.get("products"),
                     config.EDITION,
                     now,
@@ -273,7 +269,7 @@ def export_records(records, output_path):
     worksheet = workbook.create_sheet("Sales Leads")
     worksheet.append([
         "Company Name", "Relationship", "Parent Company", "Address",
-        "Stand", "Phone", "Email", "Description", "Product Categories",
+        "Stand", "Phone", "Email", "Product Categories",
         "Slug", "Edition",
     ])
     for record in records:
@@ -285,7 +281,6 @@ def export_records(records, output_path):
             record.get("stand_no"),
             record.get("phone"),
             record.get("email"),
-            record.get("description"),
             record.get("products"),
             record.get("slug"),
             config.EDITION,

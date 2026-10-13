@@ -71,7 +71,6 @@ def test_fetch_expands_subco_companies():
                                 "standNo": "A01",
                                 "phone": "+49 123",
                                 "email": "direct@example.com",
-                                "detailEng": "Direct description",
                                 "exhibitList": [
                                     {"titleEng": "Casting"},
                                 ],
@@ -89,7 +88,6 @@ def test_fetch_expands_subco_companies():
                             "standNo": "A02",
                             "phone": "+49 456",
                             "email": "co@example.com",
-                            "detailEng": "Co description",
                             "exhibitList": [{"titleEng": "Furnaces"}],
                             "subcoCompany": [],
                         }
@@ -108,7 +106,6 @@ def test_fetch_expands_subco_companies():
             "stand_no": "A01",
             "phone": "+49 123",
             "email": "direct@example.com",
-            "description": "Direct description",
             "products": "Casting",
         },
         {
@@ -120,7 +117,6 @@ def test_fetch_expands_subco_companies():
             "stand_no": "A02",
             "phone": "+49 456",
             "email": "co@example.com",
-            "description": "Co description",
             "products": "Furnaces",
         },
     ]
@@ -136,7 +132,6 @@ def test_sync_persists_detail_fields(tmp_path):
         "stand_no": "A01",
         "phone": "+49 123",
         "email": "direct@example.com",
-        "description": "Description",
         "products": "Casting",
     }]
     database_path = tmp_path / "ankiros.db"
@@ -145,7 +140,7 @@ def test_sync_persists_detail_fields(tmp_path):
 
     with sqlite3.connect(database_path) as connection:
         row = connection.execute(
-            "SELECT address, stand_no, phone, email, description, products "
+            "SELECT address, stand_no, phone, email, products "
             "FROM exhibitors"
         ).fetchone()
     assert row == (
@@ -153,7 +148,6 @@ def test_sync_persists_detail_fields(tmp_path):
         "A01",
         "+49 123",
         "direct@example.com",
-        "Description",
         "Casting",
     )
 
@@ -169,7 +163,6 @@ def test_export_matches_sales_leads_shape(tmp_path):
             "stand_no": "A01",
             "phone": "+49 123",
             "email": "direct@example.com",
-            "description": "Description",
             "products": "Casting",
         }],
         tmp_path / "ANKIROS_2026.xlsx",
@@ -185,7 +178,6 @@ def test_export_matches_sales_leads_shape(tmp_path):
         "Stand",
         "Phone",
         "Email",
-        "Description",
         "Product Categories",
         "Slug",
         "Edition",
