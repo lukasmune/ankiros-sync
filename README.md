@@ -52,8 +52,9 @@ Useful commands:
 `--filter direct` exports only companies returned by the participant list.
 `--filter co-exhibitors` exports only companies nested under a direct
 exhibitor's `subcoCompany` detail. `--filter all` includes both and labels
-each row with its relationship and parent company. The `Sales Leads` sheet
-includes the API's address, stand, phone, email, and English product
+each row with its relationship and parent company. The `Company Master` and
+`Sales Leads` sheets include each exhibitor's country specifier. `Sales Leads`
+also includes the API's address, stand, phone, email, and English product
 classifications in addition to the relationship and slug.
 
 Reports are written to `exports/ANKIROS_2026.xlsx`; the database is

@@ -20,6 +20,7 @@ DETAIL_ENDPOINT = "api/v1.0/participant/getCompanyDetailBySlug"
 EXCEL_ILLEGAL_CHARACTERS = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F]")
 RECORD_FIELDS = (
     "company_name",
+    "country",
     "slug",
     "relationship",
     "parent_company",
@@ -119,6 +120,7 @@ def _make_record(item, relationship, parent_company=None):
             or item.get("name")
             or ""
         ).strip(),
+        "country": _country_value(item),
         "slug": item.get("slug"),
         "relationship": relationship,
         "parent_company": parent_company,
@@ -136,13 +138,25 @@ def _detail_fields(detail):
         for item in detail.get("exhibitList", []) or []
         if isinstance(item, dict) and item.get("titleEng")
     ]
-    return {
+    fields = {
         "address": detail.get("address"),
         "stand_no": detail.get("standNo"),
         "phone": detail.get("phone"),
         "email": detail.get("email"),
         "products": "; ".join(products) or None,
     }
+    country = _country_value(detail)
+    if country is not None:
+        fields["country"] = country
+    return fields
+
+
+def _country_value(item):
+    return (
+        item.get("country")
+        or item.get("countryName")
+        or item.get("country_name")
+    )
 
 
 def filter_exhibitors(records, relationship_filter="all"):
@@ -173,6 +187,7 @@ def initialize_database(path=config.DATABASE_PATH):
             CREATE TABLE IF NOT EXISTS exhibitors (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 company_name TEXT NOT NULL,
+                country TEXT,
                 slug TEXT,
                 relationship TEXT NOT NULL,
                 parent_company TEXT,
@@ -192,7 +207,7 @@ def initialize_database(path=config.DATABASE_PATH):
         }
         if "description" in columns:
             connection.execute("ALTER TABLE exhibitors DROP COLUMN description")
-        for column in RECORD_FIELDS[4:]:
+        for column in RECORD_FIELDS[1:]:
             if column not in columns:
                 connection.execute(f"ALTER TABLE exhibitors ADD COLUMN {column} TEXT")
 
@@ -205,13 +220,14 @@ def sync_records(records, path=config.DATABASE_PATH):
             connection.execute(
                 """
                 INSERT INTO exhibitors (
-                    company_name, slug, relationship, parent_company,
+                    company_name, country, slug, relationship, parent_company,
                     address, stand_no, phone, email, products,
                     edition, first_seen_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(company_name, relationship, parent_company, edition)
                 DO UPDATE SET
+                    country = excluded.country,
                     slug = excluded.slug,
                     address = excluded.address,
                     stand_no = excluded.stand_no,
@@ -221,6 +237,7 @@ def sync_records(records, path=config.DATABASE_PATH):
                 """,
                 (
                     record["company_name"],
+                    record.get("country"),
                     record.get("slug"),
                     record["relationship"],
                     record.get("parent_company"),
@@ -257,10 +274,13 @@ def export_records(records, output_path):
         cell.font = Font(bold=True)
 
     companies = workbook.create_sheet("Company Master")
-    companies.append(["Company Name", "Relationship", "Parent Company", "Slug"])
+    companies.append([
+        "Company Name", "Country", "Relationship", "Parent Company", "Slug"
+    ])
     for record in records:
         companies.append(_excel_row([
             record["company_name"],
+            record.get("country"),
             record["relationship"],
             record.get("parent_company"),
             record.get("slug"),
@@ -269,7 +289,7 @@ def export_records(records, output_path):
     worksheet = workbook.create_sheet("Sales Leads")
     worksheet.append([
         "Company Name", "Relationship", "Parent Company", "Address",
-        "Stand", "Phone", "Email", "Product Categories",
+        "Country", "Stand", "Phone", "Email", "Product Categories",
         "Slug", "Edition",
     ])
     for record in records:
@@ -278,6 +298,7 @@ def export_records(records, output_path):
             record["relationship"],
             record.get("parent_company"),
             record.get("address"),
+            record.get("country"),
             record.get("stand_no"),
             record.get("phone"),
             record.get("email"),

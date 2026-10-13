@@ -14,11 +14,13 @@ from ankiros_sync import (
 RECORDS = [
     {
         "company_name": "Direct A",
+        "country": "Germany",
         "relationship": "direct",
         "parent_company": None,
     },
     {
         "company_name": "Co A",
+        "country": "Türkiye",
         "relationship": "co-exhibitor",
         "parent_company": "Direct A",
     },
@@ -61,13 +63,18 @@ def test_fetch_expands_subco_companies():
                     if url.endswith("getAllParticipantList"):
                         return {
                             "result": [
-                                {"companyName": "Direct A", "slug": "direct-a"}
+                                {
+                                    "companyName": "Direct A",
+                                    "countryName": "Germany",
+                                    "slug": "direct-a",
+                                }
                             ]
                         }
                     if kwargs["json"]["slug"] == "direct-a":
                         return {
                             "result": {
                                 "address": "Street 1",
+                                "country": "Germany",
                                 "standNo": "A01",
                                 "phone": "+49 123",
                                 "email": "direct@example.com",
@@ -77,6 +84,7 @@ def test_fetch_expands_subco_companies():
                                 "subcoCompany": [
                                     {
                                         "subcoCompanyName": "Co A",
+                                        "country": "Türkiye",
                                         "slug": "co-a",
                                     }
                                 ],
@@ -99,6 +107,7 @@ def test_fetch_expands_subco_companies():
     assert records == [
         {
             "company_name": "Direct A",
+            "country": "Germany",
             "slug": "direct-a",
             "relationship": "direct",
             "parent_company": None,
@@ -110,6 +119,7 @@ def test_fetch_expands_subco_companies():
         },
         {
             "company_name": "Co A",
+            "country": "Türkiye",
             "slug": "co-a",
             "relationship": "co-exhibitor",
             "parent_company": "Direct A",
@@ -125,6 +135,7 @@ def test_fetch_expands_subco_companies():
 def test_sync_persists_detail_fields(tmp_path):
     records = [{
         "company_name": "Direct A",
+        "country": "Germany",
         "slug": "direct-a",
         "relationship": "direct",
         "parent_company": None,
@@ -140,10 +151,11 @@ def test_sync_persists_detail_fields(tmp_path):
 
     with sqlite3.connect(database_path) as connection:
         row = connection.execute(
-            "SELECT address, stand_no, phone, email, products "
+            "SELECT country, address, stand_no, phone, email, products "
             "FROM exhibitors"
         ).fetchone()
     assert row == (
+        "Germany",
         "Street 1",
         "A01",
         "+49 123",
@@ -156,6 +168,7 @@ def test_export_matches_sales_leads_shape(tmp_path):
     output = export_records(
         [{
             "company_name": "Direct A",
+            "country": "Germany",
             "relationship": "direct",
             "parent_company": None,
             "slug": "direct-a",
@@ -175,6 +188,7 @@ def test_export_matches_sales_leads_shape(tmp_path):
         "Relationship",
         "Parent Company",
         "Address",
+        "Country",
         "Stand",
         "Phone",
         "Email",
@@ -182,4 +196,4 @@ def test_export_matches_sales_leads_shape(tmp_path):
         "Slug",
         "Edition",
     )
-    assert workbook["Sales Leads"].cell(row=2, column=4).value == "Street 1"
+    assert workbook["Sales Leads"].cell(row=2, column=5).value == "Germany"
